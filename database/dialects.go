@@ -34,43 +34,84 @@ const (
 	DialectVertica Dialect = "vertica"
 )
 
+type aliases map[string]struct{}
+
+// registry maps a canonical [Dialect] value to its corresponding specification
+// and is the source of truth enumerating all supported Dialects.
+var registry = map[Dialect]struct {
+	// aliases is the set of supported external names for the corresponding key.
+	aliases aliases
+	// querier returns the default [dialect.Querier] implementation for this dialect.
+	querier func() dialect.Querier
+}{
+	DialectPostgres: {
+		aliases{"postgres": {}, "pgx": {}},
+		// A few querier values need to be wrapped in a type-appropriate function, because the
+		// backing constructor returns a database.QuerierExtender, and its function type won't
+		// match the querier type, even if database.QuerierExtender embeds database.Querier.
+		func() dialect.Querier { return dialects.NewPostgres() },
+	},
+	DialectMySQL: {
+		aliases{"mysql": {}},
+		func() dialect.Querier { return dialects.NewMysql() },
+	},
+	DialectSQLite3: {
+		aliases{"sqlite": {}, "sqlite3": {}},
+		dialects.NewSqlite3,
+	},
+	DialectSpanner: {
+		aliases{"spanner": {}},
+		dialects.NewSpanner,
+	},
+	DialectMSSQL: {
+		aliases{"mssql": {}, "azuresql": {}, "sqlserver": {}},
+		dialects.NewSqlserver,
+	},
+	DialectRedshift: {
+		aliases{"redshift": {}},
+		dialects.NewRedshift,
+	},
+	DialectTiDB: {
+		aliases{"tidb": {}},
+		dialects.NewTidb,
+	},
+	DialectClickHouse: {
+		aliases{"clickhouse": {}},
+		dialects.NewClickhouse,
+	},
+	DialectVertica: {
+		aliases{"vertica": {}},
+		dialects.NewVertica,
+	},
+	DialectYdB: {
+		aliases{"ydb": {}},
+		dialects.NewYDB,
+	},
+	DialectTurso: {
+		aliases{"turso": {}},
+		dialects.NewTurso,
+	},
+	DialectStarrocks: {
+		aliases{"starrocks": {}},
+		dialects.NewStarrocks,
+	},
+	DialectAuroraDSQL: {
+		aliases{"dsql": {}},
+		func() dialect.Querier { return dialects.NewAuroraDSQL() },
+	},
+}
+
 // ParseDialect returns the corresponding [Dialect], if any, for a given string with external
 // origin. A supported [Dialect] value, like [DialectPostgres], may have multiple supported
 // aliases, e.g. "postgres" or "pgx". Use this function to ensure that a [Dialect] instance
 // passed to any function that accepts a [Dialect] is a valid [Dialect].
 func ParseDialect(s string) (d Dialect, err error) {
-	// Every non-error return value from this function must have an entry in the [NewStore] lookup map.
-	switch s {
-	case "postgres", "pgx":
-		d = DialectPostgres
-	case "mysql":
-		d = DialectMySQL
-	case "sqlite3", "sqlite":
-		d = DialectSQLite3
-	case "spanner":
-		d = DialectSpanner
-	case "mssql", "azuresql", "sqlserver":
-		d = DialectMSSQL
-	case "redshift":
-		d = DialectRedshift
-	case "tidb":
-		d = DialectTiDB
-	case "clickhouse":
-		d = DialectClickHouse
-	case "vertica":
-		d = DialectVertica
-	case "ydb":
-		d = DialectYdB
-	case "turso":
-		d = DialectTurso
-	case "starrocks":
-		d = DialectStarrocks
-	case "dsql":
-		d = DialectAuroraDSQL
-	default:
-		err = ErrUnknownDialect
+	for d, spec := range registry {
+		if _, ok := spec.aliases[s]; ok {
+			return d, nil
+		}
 	}
-	return
+	return "", ErrUnknownDialect
 }
 
 // NewStore returns a new [Store] implementation for the given dialect. The
@@ -79,26 +120,11 @@ func NewStore(d Dialect, tableName string) (Store, error) {
 	if d == DialectCustom {
 		return nil, errors.New("custom dialect is not supported")
 	}
-	lookup := map[Dialect]dialect.Querier{
-		DialectClickHouse: dialects.NewClickhouse(),
-		DialectAuroraDSQL: dialects.NewAuroraDSQL(),
-		DialectMSSQL:      dialects.NewSqlserver(),
-		DialectMySQL:      dialects.NewMysql(),
-		DialectPostgres:   dialects.NewPostgres(),
-		DialectRedshift:   dialects.NewRedshift(),
-		DialectSQLite3:    dialects.NewSqlite3(),
-		DialectSpanner:    dialects.NewSpanner(),
-		DialectStarrocks:  dialects.NewStarrocks(),
-		DialectTiDB:       dialects.NewTidb(),
-		DialectTurso:      dialects.NewTurso(),
-		DialectVertica:    dialects.NewVertica(),
-		DialectYdB:        dialects.NewYDB(),
+	s, ok := registry[d]
+	if ok {
+		return NewStoreFromQuerier(tableName, s.querier())
 	}
-	querier, ok := lookup[d]
-	if !ok {
-		return nil, ErrUnknownDialect
-	}
-	return NewStoreFromQuerier(tableName, querier)
+	return nil, ErrUnknownDialect
 }
 
 // NewStoreFromQuerier returns a new [Store] implementation for the given querier.

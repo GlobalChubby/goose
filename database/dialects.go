@@ -11,103 +11,35 @@ import (
 )
 
 // Dialect is the type of database dialect.
-type Dialect string
+type Dialect = dialects.Dialect
 
 var ErrUnknownDialect = errors.New("unknown dialect")
 
 const (
-	DialectCustom     Dialect = ""
-	DialectClickHouse Dialect = "clickhouse"
-	DialectAuroraDSQL Dialect = "dsql"
-	DialectMSSQL      Dialect = "mssql"
-	DialectMySQL      Dialect = "mysql"
-	DialectPostgres   Dialect = "postgres"
-	DialectRedshift   Dialect = "redshift"
-	DialectSQLite3    Dialect = "sqlite3"
-	DialectSpanner    Dialect = "spanner"
-	DialectStarrocks  Dialect = "starrocks"
-	DialectTiDB       Dialect = "tidb"
-	DialectTurso      Dialect = "turso"
-	DialectYdB        Dialect = "ydb"
-
+	DialectCustom     Dialect = dialects.Custom
+	DialectClickHouse Dialect = dialects.ClickHouse
+	DialectAuroraDSQL Dialect = dialects.AuroraDSQL
+	DialectMSSQL      Dialect = dialects.MSSQL
+	DialectMySQL      Dialect = dialects.MySQL
+	DialectPostgres   Dialect = dialects.Postgres
+	DialectRedshift   Dialect = dialects.Redshift
+	DialectSQLite3    Dialect = dialects.SQLite3
+	DialectSpanner    Dialect = dialects.Spanner
+	DialectStarrocks  Dialect = dialects.Starrocks
+	DialectTiDB       Dialect = dialects.TiDB
+	DialectTurso      Dialect = dialects.Turso
+	DialectYdB        Dialect = dialects.YdB
 	// DEPRECATED: Vertica support is deprecated and will be removed in a future release.
-	DialectVertica Dialect = "vertica"
+	DialectVertica Dialect = dialects.Vertica
 )
-
-type aliases map[string]struct{}
-
-// registry maps a canonical [Dialect] value to its corresponding specification
-// and is the source of truth enumerating all supported Dialects.
-var registry = map[Dialect]struct {
-	// aliases is the set of supported external names for the corresponding key.
-	aliases aliases
-	// querier returns the default [dialect.Querier] implementation for this dialect.
-	querier func() dialect.Querier
-}{
-	DialectPostgres: {
-		aliases{"postgres": {}, "pgx": {}},
-		// A few querier values need to be wrapped in a type-appropriate function, because the
-		// backing constructor returns a database.QuerierExtender, and its function type won't
-		// match the querier type, even if database.QuerierExtender embeds database.Querier.
-		func() dialect.Querier { return dialects.NewPostgres() },
-	},
-	DialectMySQL: {
-		aliases{"mysql": {}},
-		func() dialect.Querier { return dialects.NewMysql() },
-	},
-	DialectSQLite3: {
-		aliases{"sqlite": {}, "sqlite3": {}},
-		dialects.NewSqlite3,
-	},
-	DialectSpanner: {
-		aliases{"spanner": {}},
-		dialects.NewSpanner,
-	},
-	DialectMSSQL: {
-		aliases{"mssql": {}, "azuresql": {}, "sqlserver": {}},
-		dialects.NewSqlserver,
-	},
-	DialectRedshift: {
-		aliases{"redshift": {}},
-		dialects.NewRedshift,
-	},
-	DialectTiDB: {
-		aliases{"tidb": {}},
-		dialects.NewTidb,
-	},
-	DialectClickHouse: {
-		aliases{"clickhouse": {}},
-		dialects.NewClickhouse,
-	},
-	DialectVertica: {
-		aliases{"vertica": {}},
-		dialects.NewVertica,
-	},
-	DialectYdB: {
-		aliases{"ydb": {}},
-		dialects.NewYDB,
-	},
-	DialectTurso: {
-		aliases{"turso": {}},
-		dialects.NewTurso,
-	},
-	DialectStarrocks: {
-		aliases{"starrocks": {}},
-		dialects.NewStarrocks,
-	},
-	DialectAuroraDSQL: {
-		aliases{"dsql": {}},
-		func() dialect.Querier { return dialects.NewAuroraDSQL() },
-	},
-}
 
 // ParseDialect returns the corresponding [Dialect], if any, for a given string with external
 // origin. A supported [Dialect] value, like [DialectPostgres], may have multiple supported
 // aliases, e.g. "postgres" or "pgx". Use this function to ensure that a [Dialect] instance
 // passed to any function that accepts a [Dialect] is a valid [Dialect].
 func ParseDialect(s string) (d Dialect, err error) {
-	for d, spec := range registry {
-		if _, ok := spec.aliases[s]; ok {
+	for d, spec := range dialects.Registry {
+		if _, ok := spec.Aliases[s]; ok {
 			return d, nil
 		}
 	}
@@ -120,9 +52,9 @@ func NewStore(d Dialect, tableName string) (Store, error) {
 	if d == DialectCustom {
 		return nil, errors.New("custom dialect is not supported")
 	}
-	s, ok := registry[d]
+	s, ok := dialects.Registry[d]
 	if ok {
-		return NewStoreFromQuerier(tableName, s.querier())
+		return NewStoreFromQuerier(tableName, s.Querier())
 	}
 	return nil, ErrUnknownDialect
 }

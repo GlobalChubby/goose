@@ -1,11 +1,15 @@
 package dialects
 
 import (
+	"errors"
+
 	"github.com/pressly/goose/v3/database/dialect"
 )
 
 // Dialect is the type of database dialect.
 type Dialect string
+
+var ErrUnknownDialect = errors.New("unknown dialect")
 
 const (
 	Custom     Dialect = ""
@@ -24,19 +28,19 @@ const (
 	Vertica    Dialect = "vertica"
 )
 
-// Aliases is the set of supported external names for a Dialect.
-type Aliases map[string]struct{}
+// aliases is the set of supported external names for a Dialect.
+type aliases map[string]struct{}
 
 // spec specifies a supported dialect's external aliases as well
 // as its default [dialect.Querier] implementation.
 type spec struct {
-	// Aliases is the set of supported external names for a Dialect.
-	Aliases Aliases
-	// Querier returns the default [dialect.Querier] implementation for this dialect.                                              ..
-	Querier func() dialect.Querier
+	// aliases is the set of supported external names for a Dialect.
+	aliases aliases
+	// querier is a function that returns the default [dialect.Querier] implementation for a Dialect.
+	querier func() dialect.Querier
 }
 
-func aliases(values ...string) Aliases {
+func alias(values ...string) aliases {
 	a := make(map[string]struct{}, len(values))
 	for _, v := range values {
 		a[v] = struct{}{}
@@ -44,62 +48,82 @@ func aliases(values ...string) Aliases {
 	return a
 }
 
-// Registry maps a canonical [Dialect] value to its corresponding specification
+// registry maps a canonical [Dialect] value to its corresponding specification
 // and is the source of truth enumerating all supported Dialects.
-var Registry = map[Dialect]spec{
+var registry = map[Dialect]spec{
 	Postgres: {
-		aliases("postgres", "pgx"),
-		// A few Querier values need to be wrapped in a type-appropriate function, because the
+		alias("postgres", "pgx"),
+		// A few querier values need to be wrapped in a type-appropriate function, because the
 		// backing constructor returns a database.QuerierExtender, and its function type won't
 		// match the querier type, even if database.QuerierExtender embeds database.Querier.
 		func() dialect.Querier { return NewPostgres() },
 	},
 	MySQL: {
-		aliases("mysql"),
+		alias("mysql"),
 		func() dialect.Querier { return NewMysql() },
 	},
 	SQLite3: {
-		aliases("sqlite3", "sqlite"),
+		alias("sqlite3", "sqlite"),
 		NewSqlite3,
 	},
 	Spanner: {
-		aliases("spanner"),
+		alias("spanner"),
 		NewSpanner,
 	},
 	MSSQL: {
-		aliases("mssql", "azuresql", "sqlserver"),
+		alias("mssql", "azuresql", "sqlserver"),
 		NewSqlserver,
 	},
 	Redshift: {
-		aliases("redshift"),
+		alias("redshift"),
 		NewRedshift,
 	},
 	TiDB: {
-		aliases("tidb"),
+		alias("tidb"),
 		NewTidb,
 	},
 	ClickHouse: {
-		aliases("clickhouse"),
+		alias("clickhouse"),
 		NewClickhouse,
 	},
 	Vertica: {
-		aliases("vertica"),
+		alias("vertica"),
 		NewVertica,
 	},
 	YdB: {
-		aliases("ydb"),
+		alias("ydb"),
 		NewYDB,
 	},
 	Turso: {
-		aliases("turso"),
+		alias("turso"),
 		NewTurso,
 	},
 	Starrocks: {
-		aliases("starrocks"),
+		alias("starrocks"),
 		NewStarrocks,
 	},
 	AuroraDSQL: {
-		aliases("dsql"),
+		alias("dsql"),
 		func() dialect.Querier { return NewAuroraDSQL() },
 	},
+}
+
+// Parse returns the corresponding [Dialect], if any, for a given [Dialect] alias.
+func Parse(s string) (Dialect, error) {
+	for d, spec := range registry {
+		_, ok := spec.aliases[s]
+		if ok {
+			return d, nil
+		}
+	}
+	return "", ErrUnknownDialect
+}
+
+// Querier returns the default [dialect.Querier] implementation for the dialect.
+func Querier(d Dialect) (dialect.Querier, error) {
+	s, ok := registry[d]
+	if ok {
+		return s.querier(), nil
+	}
+	return nil, ErrUnknownDialect
 }

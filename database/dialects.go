@@ -13,7 +13,7 @@ import (
 // Dialect is the type of database dialect.
 type Dialect = dialects.Dialect
 
-var ErrUnknownDialect = errors.New("unknown dialect")
+var ErrUnknownDialect = dialects.ErrUnknownDialect
 
 const (
 	DialectCustom     Dialect = dialects.Custom
@@ -38,12 +38,7 @@ const (
 // aliases, e.g. "postgres" or "pgx". Use this function to ensure that a [Dialect] instance
 // passed to any function that accepts a [Dialect] is a valid [Dialect].
 func ParseDialect(s string) (d Dialect, err error) {
-	for d, spec := range dialects.Registry {
-		if _, ok := spec.Aliases[s]; ok {
-			return d, nil
-		}
-	}
-	return "", ErrUnknownDialect
+	return dialects.Parse(s)
 }
 
 // NewStore returns a new [Store] implementation for the given dialect. The
@@ -52,11 +47,11 @@ func NewStore(d Dialect, tableName string) (Store, error) {
 	if d == DialectCustom {
 		return nil, errors.New("custom dialect is not supported")
 	}
-	s, ok := dialects.Registry[d]
-	if ok {
-		return NewStoreFromQuerier(tableName, s.Querier())
+	q, err := dialects.Querier(d)
+	if err != nil {
+		return nil, err
 	}
-	return nil, ErrUnknownDialect
+	return NewStoreFromQuerier(tableName, q)
 }
 
 // NewStoreFromQuerier returns a new [Store] implementation for the given querier.

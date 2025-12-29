@@ -24,9 +24,12 @@ const (
 	Vertica    Dialect = "vertica"
 )
 
+// Aliases is the set of supported external names for a Dialect.
 type Aliases map[string]struct{}
 
-type Spec struct {
+// spec specifies a supported dialect's external aliases as well
+// as its default [dialect.Querier] implementation.
+type spec struct {
 	// Aliases is the set of supported external names for a Dialect.
 	Aliases Aliases
 	// Querier returns the default [dialect.Querier] implementation for this dialect.                                              ..
@@ -43,7 +46,7 @@ func aliases(values ...string) Aliases {
 
 // Registry maps a canonical [Dialect] value to its corresponding specification
 // and is the source of truth enumerating all supported Dialects.
-var Registry = map[Dialect]Spec{
+var Registry = map[Dialect]spec{
 	Postgres: {
 		aliases("postgres", "pgx"),
 		// A few Querier values need to be wrapped in a type-appropriate function, because the

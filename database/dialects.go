@@ -11,27 +11,26 @@ import (
 )
 
 // Dialect is the type of database dialect.
-type Dialect string
+type Dialect = dialects.Dialect
 
-var ErrUnknownDialect = errors.New("unknown dialect")
+var ErrUnknownDialect = dialects.ErrUnknownDialect
 
 const (
-	DialectCustom     Dialect = ""
-	DialectClickHouse Dialect = "clickhouse"
-	DialectAuroraDSQL Dialect = "dsql"
-	DialectMSSQL      Dialect = "mssql"
-	DialectMySQL      Dialect = "mysql"
-	DialectPostgres   Dialect = "postgres"
-	DialectRedshift   Dialect = "redshift"
-	DialectSQLite3    Dialect = "sqlite3"
-	DialectSpanner    Dialect = "spanner"
-	DialectStarrocks  Dialect = "starrocks"
-	DialectTiDB       Dialect = "tidb"
-	DialectTurso      Dialect = "turso"
-	DialectYdB        Dialect = "ydb"
-
+	DialectCustom     Dialect = dialects.Custom
+	DialectClickHouse Dialect = dialects.ClickHouse
+	DialectAuroraDSQL Dialect = dialects.AuroraDSQL
+	DialectMSSQL      Dialect = dialects.MSSQL
+	DialectMySQL      Dialect = dialects.MySQL
+	DialectPostgres   Dialect = dialects.Postgres
+	DialectRedshift   Dialect = dialects.Redshift
+	DialectSQLite3    Dialect = dialects.SQLite3
+	DialectSpanner    Dialect = dialects.Spanner
+	DialectStarrocks  Dialect = dialects.Starrocks
+	DialectTiDB       Dialect = dialects.TiDB
+	DialectTurso      Dialect = dialects.Turso
+	DialectYdB        Dialect = dialects.YdB
 	// DEPRECATED: Vertica support is deprecated and will be removed in a future release.
-	DialectVertica Dialect = "vertica"
+	DialectVertica Dialect = dialects.Vertica
 )
 
 // ParseDialect returns the corresponding [Dialect], if any, for a given string with external
@@ -39,38 +38,7 @@ const (
 // aliases, e.g. "postgres" or "pgx". Use this function to ensure that a [Dialect] instance
 // passed to any function that accepts a [Dialect] is a valid [Dialect].
 func ParseDialect(s string) (d Dialect, err error) {
-	// Every non-error return value from this function must have an entry in the [NewStore] lookup map.
-	switch s {
-	case "postgres", "pgx":
-		d = DialectPostgres
-	case "mysql":
-		d = DialectMySQL
-	case "sqlite3", "sqlite":
-		d = DialectSQLite3
-	case "spanner":
-		d = DialectSpanner
-	case "mssql", "azuresql", "sqlserver":
-		d = DialectMSSQL
-	case "redshift":
-		d = DialectRedshift
-	case "tidb":
-		d = DialectTiDB
-	case "clickhouse":
-		d = DialectClickHouse
-	case "vertica":
-		d = DialectVertica
-	case "ydb":
-		d = DialectYdB
-	case "turso":
-		d = DialectTurso
-	case "starrocks":
-		d = DialectStarrocks
-	case "dsql":
-		d = DialectAuroraDSQL
-	default:
-		err = ErrUnknownDialect
-	}
-	return
+	return dialects.Parse(s)
 }
 
 // NewStore returns a new [Store] implementation for the given dialect. The
@@ -79,26 +47,11 @@ func NewStore(d Dialect, tableName string) (Store, error) {
 	if d == DialectCustom {
 		return nil, errors.New("custom dialect is not supported")
 	}
-	lookup := map[Dialect]dialect.Querier{
-		DialectClickHouse: dialects.NewClickhouse(),
-		DialectAuroraDSQL: dialects.NewAuroraDSQL(),
-		DialectMSSQL:      dialects.NewSqlserver(),
-		DialectMySQL:      dialects.NewMysql(),
-		DialectPostgres:   dialects.NewPostgres(),
-		DialectRedshift:   dialects.NewRedshift(),
-		DialectSQLite3:    dialects.NewSqlite3(),
-		DialectSpanner:    dialects.NewSpanner(),
-		DialectStarrocks:  dialects.NewStarrocks(),
-		DialectTiDB:       dialects.NewTidb(),
-		DialectTurso:      dialects.NewTurso(),
-		DialectVertica:    dialects.NewVertica(),
-		DialectYdB:        dialects.NewYDB(),
+	q, err := dialects.Querier(d)
+	if err != nil {
+		return nil, err
 	}
-	querier, ok := lookup[d]
-	if !ok {
-		return nil, ErrUnknownDialect
-	}
-	return NewStoreFromQuerier(tableName, querier)
+	return NewStoreFromQuerier(tableName, q)
 }
 
 // NewStoreFromQuerier returns a new [Store] implementation for the given querier.
